@@ -119,7 +119,7 @@ OreSpawn, whose scales and bones are crafting materials. The check itself only r
 
 ---
 
-## Every mixin here loads in the late phase
+## Which phase a mixin belongs in, and why it matters
 
 A mixin config listed in the jar manifest under `MixinConfigs` is processed during the
 LaunchWrapper phase, **before FML has added ordinary mod jars to the classpath**. A mixin in that
@@ -131,16 +131,21 @@ warning rather than an error:
 [mixin]: @Mixin target some.mod.SomeClass was not found ...
 ```
 
-Boot continues and the patch silently never applies. This is not theoretical — it was found in
-the pack this mod was built for, where another mod's mixin targets `morph.common.morph.MorphState`.
-That class is present in the Morph jar; it is simply not on the classpath yet when the early
-config is read. The patch has never once run.
+Boot continues and the patch silently never applies. This is not theoretical. It happened to this
+mod's own 0.1.0, and it is still happening in the pack it was built for to another mod's mixin
+targeting `morph.common.morph.MorphState` — that class is present in the Morph jar; it is simply
+not on the classpath yet when the early config is read, and the patch has never once run.
 
-Every mixin in this mod targets a mod class, so they all live in `mixins.sondplaytweaks.late.json`,
-registered through GTNHMixins' `ILateMixinLoader` (shipped inside UniMixins) at
-`LoaderState.CONSTRUCTING`. That interface also hands over the set of loaded mod ids, so each
-patch is gated on its target mod actually being installed rather than relying on a not-found
-warning:
+So the split is by what a mixin targets, not by preference:
+
+| Target | Config | Available when |
+|---|---|---|
+| vanilla, Forge, FML | `mixins.sondplaytweaks.json` | LaunchWrapper — already on the classpath |
+| any other mod | `mixins.sondplaytweaks.late.json` | `LoaderState.CONSTRUCTING` |
+
+The late config is registered through GTNHMixins' `ILateMixinLoader`, which ships inside UniMixins.
+It also hands over the set of loaded mod ids, so each patch is gated on its target mod actually
+being installed rather than relying on a not-found warning:
 
 ```java
 public List<String> getMixins(Set<String> loadedMods) {
