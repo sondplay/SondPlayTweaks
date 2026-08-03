@@ -1,4 +1,4 @@
-# $ondPlayTweaks
+# SondPlayTweaks
 
 Mixin patches for Minecraft 1.7.10, aimed at bugs and performance problems in old mods that
 nobody ever fixed.
@@ -62,11 +62,24 @@ only `removeLeaves` keeps every one of them and simply never deletes the block.
 All four classes declare `private void removeLeaves(World, int, int, int)` with an identical
 signature, so a single mixin with a `targets` list covers all of them.
 
-**Known limitation, stated on purpose.** This does **not** reduce the ~63 `getBlock` calls the
-scan performs per random tick. It was never measured how much of this pack's `updateBlocks` time
-is OreSpawn leaves — that was inferred, not proven. Removing the scan would mean rewriting all
-four method bodies by hand, with a real risk of getting a random bound or a time-of-day threshold
-wrong. That trade is not worth taking without a measurement first.
+**This is a correctness fix, not a performance one — now measured.** The scan still runs; this
+patch does not touch it. A 20-minute spark profile under deliberate stress (hundreds of OreSpawn
+bosses fighting, then the player running far away to force chunk generation) puts every OreSpawn
+block tick at the bottom of the table:
+
+```
+updateBlocks total                                     9.70 ms/tick
+  extrabiomes.blocks.BlockLeafEbxl.updateTick          2.85 ms/tick
+  net.minecraft.block.BlockLeaves.updateTick           0.07 ms/tick
+  danger.orespawn.AntBlock.updateTick                  0.00 ms/tick
+  danger.orespawn.BlockButterflyPlant.updateTick       0.00 ms/tick
+  danger.orespawn.BlockLettuce.updateTick              0.00 ms/tick
+  the four OreSpawn leaf classes                       absent from the profile entirely
+```
+
+So the earlier suspicion that OreSpawn leaves were a meaningful share of block-tick time was
+wrong. They cost essentially nothing. What this patch fixes is trees destroying themselves, which
+is a bug regardless of its cost.
 
 ---
 
@@ -120,12 +133,17 @@ Java 6.
 
 ## Roadmap
 
-| Patch | Status |
-|---|---|
-| OreSpawn leaves | **0.1.0** |
-| `chunkLoadOverride` / `dummyChunk` — [GTNH #11425](https://github.com/GTNewHorizons/GT-New-Horizons-Modpack/issues/11425) measured a drop from 60–90% to under 20% server thread; the issue was closed by a stale bot in 2022 and the fix was never packaged anywhere | planned |
-| Path recompute cooldown and `failedPathFindingPenalty` for OreSpawn entities — the mod calls `tryMoveToEntityLiving` (53 classes) and `tryMoveToXYZ` (30 classes) without vanilla's failure backoff, so an unreachable target is re-pathed forever at a fixed rate | planned |
-| `findSomethingToAttack` — sorts the full entity list before filtering it; filtering first makes the sort cheaper | planned |
+Ordered by measured cost. Numbers are ms per tick from a 20-minute spark profile on a
+deliberately overloaded world (hundreds of OreSpawn bosses fighting), server thread total
+**75.96 ms/tick** against a 50 ms budget.
+
+| Patch | Measured | Status |
+|---|---|---|
+| OreSpawn leaves destroying themselves | correctness, ~0 ms | **0.1.0** |
+| **Path recompute cooldown and failure backoff for OreSpawn entities.** OreSpawn calls `tryMoveToEntityLiving` (53 classes) and `tryMoveToXYZ` (30 classes) directly from `updateAITasks` with no cooldown and no `failedPathFindingPenalty`, so an unreachable target is re-pathed forever at a fixed rate. Vanilla degrades to 19, 34, then 49 ticks between attempts. | `GiantRobot` 7.12, `Hammerhead` 4.04, `Godzilla` 1.82 — **12.98 ms/tick** from three mobs alone, of which **8.57 ms** is `getBlock` inside `func_82565_a` | next |
+| **ExtrabiomesXL leaf decay.** `BlockLeafEbxl` overrides `updateTick` and, like OreSpawn's, is not covered by Hodgepodge's BFS decay (which handles vanilla, BiomesOPlenty, Magical, Nether and Witch leaves) or by BugTorch. | **2.85 ms/tick**, 29% of all block-tick time | planned |
+| `findSomethingToAttack` — sorts the full entity list before filtering it | `GiantRobot` 0.02, `Hammerhead` 0.05, `Godzilla` 0.03 ms/tick | low priority |
+| ~~`chunkLoadOverride` / `dummyChunk` ([GTNH #11425](https://github.com/GTNewHorizons/GT-New-Horizons-Modpack/issues/11425))~~ | **dropped** | Pathfinding never reaches disk in this configuration. Under `getPathEntityToEntity`, `getChunkFromChunkCoords` resolves through `ChunkProviderServer.provideChunk` → `ServerThreadLongHashMap.getValueByKey` → a fastutil map hit, 0.3 ms/tick, with no `loadChunk` beneath it. Hodgepodge's `preventLoadingChunksWhenPathfinding` already closes this. |
 
 ---
 

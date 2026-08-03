@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build do $ondPlayTweaks — javac na mao, sem gradle.
+# Build do SondPlayTweaks — javac na mao, sem gradle.
 #
 # Por que sem gradle: o ForgeGradle 1.2 oficial esta morto (403 nos assets desde
 # 2022) e o RetroFuturaGradle baixaria MC+MCP inteiro. Nao precisamos: os mixins
@@ -25,7 +25,7 @@ ORESPAWN="$MODS/Ore-Spawn-Mod-1.7.10.jar"
 
 SRC='src/main/java'
 RES='src/main/resources'
-OUTJAR="../\$ondPlayTweaks-$MCVER-$VERSION.jar"
+OUTJAR="../SondPlayTweaks-$MCVER-$VERSION.jar"
 
 # guarda contra jar publicado anunciando versao diferente da do build
 DECLARADA=$(grep -oP 'VERSION\s*=\s*"\K[^"]+' "$SRC/com/sondplay/tweaks/SondPlayTweaks.java")
@@ -53,4 +53,4 @@ jar cfm "$OUTJAR" MANIFEST.MF -C OUT .
 echo "== conteudo =="
 unzip -l "$OUTJAR" | grep -E '\.class|\.json|MANIFEST'
 echo ""
-echo "OK -> \$ondPlayTweaks-$MCVER-$VERSION.jar"
+echo "OK -> SondPlayTweaks-$MCVER-$VERSION.jar"
