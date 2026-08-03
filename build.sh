@@ -16,8 +16,24 @@ cd "$(dirname "$0")"
 
 # Manter em sincronia com SondPlayTweaks.VERSION (o script confere abaixo).
 MCVER='1.7.10'
-VERSION='0.2.0'
+VERSION='0.3.0'
 
+# ORDEM DO CLASSPATH IMPORTA.
+#
+# Em producao o 1.7.10 roda com nomes de CLASSE em MCP (net.minecraft.entity.Entity) mas nomes de
+# MEMBRO em SRG (func_145782_y, field_70173_aa). Como nao geramos refmap, o bytecode que emitimos
+# precisa ja citar SRG — senao da NoSuchMethodError em runtime.
+#
+#   deobfed.jar   vanilla com membros SRG      <- TEM QUE VIR PRIMEIRO
+#   forgeSrc.jar  vanilla com membros MCP, e as classes do Forge/FML
+#
+# As duas trazem net.minecraft.*; com o deobfed na frente, o javac resolve vanilla pelo SRG. As
+# classes de cpw.mods.fml.* e net.minecraftforge.* so existem no forgeSrc, e nao sao ofuscadas,
+# entao vem de la sem problema.
+#
+# (Era isso que o suspatch antigo contornava com reflexao em tudo: sem um jar SRG no classpath,
+#  chamar um metodo do vanilla direto nao tinha como funcionar.)
+DEOBF='C:/PolyMC/instances/Paraiso Fiscal/HeapCleaner/forge-src/build/tmp/deobfuscateJar/deobfed.jar'
 FORGE='C:/Users/$ondPlay/.gradle/caches/minecraft/net/minecraftforge/forge/1.7.10-10.13.4.1614-1.7.10/forgeSrc-1.7.10-10.13.4.1614-1.7.10.jar'
 MODS='C:/PolyMC/instances/Modpack Edredom/.minecraft/mods'
 MIXIN="$MODS/+unimixins-all-1.7.10-0.3.1.jar"
@@ -34,7 +50,7 @@ if [ "$DECLARADA" != "$VERSION" ]; then
     exit 1
 fi
 
-for f in "$FORGE" "$MIXIN" "$ORESPAWN"; do
+for f in "$DEOBF" "$FORGE" "$MIXIN" "$ORESPAWN"; do
     [ -f "$f" ] || { echo "FALTANDO no classpath: $f"; exit 1; }
 done
 
@@ -42,7 +58,7 @@ echo "== compilando =="
 rm -rf OUT && mkdir -p OUT
 find "$SRC" -name '*.java' > .sources
 javac -encoding UTF-8 -source 8 -target 8 -nowarn -proc:none \
-      -cp "$FORGE;$MIXIN;$ORESPAWN" -d OUT @.sources
+      -cp "$DEOBF;$FORGE;$MIXIN;$ORESPAWN" -d OUT @.sources
 rm -f .sources
 
 echo "== empacotando =="

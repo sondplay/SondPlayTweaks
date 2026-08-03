@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.0
+
+Absorbs the pack's earlier patch jar, which is now retired.
+
+- **Superheroes Unlimited event handlers skip entities they cannot affect.** Carried over, with
+  every reflective access removed. The inherited version reached the event's entity through
+  `Field.get` and spent 1.94 ms/tick on it — `LivingEvent.entityLiving` is `public final`.
+  `ASMEventHandler.owner` and `.readable` are now `@Shadow`ed, the player test is an `instanceof`
+  instead of a class-name string search, and the inventory scan uses the real fields. Its periodic
+  cache cleanup used `(++n & 0x2710) == 0`, a bitwise AND rather than a modulo, which fired for
+  n = 1 through 15 and then only sporadically; it is now `% 10000`.
+- **Worthless drops in water despawn in 30 seconds instead of 5 minutes.** Carried over unchanged
+  in behaviour. Player-dropped, enchanted, named, unstackable and OreSpawn items are untouched.
+- A third patch from that jar was dropped rather than migrated: it fixed a `ClassCastException` in
+  `MorphState.parseTag` that Morph 0.9.2 caused by casting the NBT map to `HashMap`. Morph 0.9.3
+  casts to `Map`, so the crash is gone at the source. That mixin had also never applied — it was
+  in an early config targeting a mod class, the same bug fixed in 0.2.0.
+- **Build fix: classpath order.** 1.7.10 runs with MCP class names but SRG member names, so
+  without a refmap the emitted bytecode has to name SRG members or die with `NoSuchMethodError`.
+  The build now puts an SRG-named Minecraft jar ahead of the MCP-named one. This is why the
+  inherited code used reflection everywhere — it was working around not having one.
+
 ## 0.2.0
 
 **The leaf patch in 0.1.0 never applied.** It was registered in the early mixin config, which is

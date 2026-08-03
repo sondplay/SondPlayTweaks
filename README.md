@@ -10,7 +10,7 @@ was inferred rather than measured, it says so.
 ```
 Minecraft   1.7.10
 Requires    UniMixins
-Version     0.2.0
+Version     0.3.0
 ```
 
 ---
@@ -80,6 +80,42 @@ updateBlocks total                                     9.70 ms/tick
 ```
 
 Either way, trees destroying themselves is a bug regardless of what it costs.
+
+### Superheroes Unlimited event handlers skip entities they cannot affect
+
+Superheroes Unlimited registers on the order of 250 listeners for `LivingUpdateEvent`. Forge posts
+that event once per living entity per tick and dispatches it to every listener, so listener count
+multiplies against entity count. None of them do anything for a mob, and none do anything for a
+player who is not carrying the mod's gear. This cancels the call at the head of
+`ASMEventHandler.invoke` when the handler belongs to that mod and the entity cannot be affected.
+
+**What a profile can and cannot show here.** The listeners this cancels never run, so they never
+appear in a profile. Their cost is invisible and no measurement can be used to argue the guard
+pays for itself. What a profile *can* show is the guard's own cost — and that is why this exists
+in its current form. The version inherited from the pack's earlier patch jar reached the event's
+entity through `java.lang.reflect.Field.get` and spent **1.94 ms/tick** doing so, more than every
+listener that survived the filter put together. `LivingEvent.entityLiving` is `public final`.
+There was never a reason to reflect on it.
+
+Every reflective access is gone: `ASMEventHandler.owner` and `.readable` are `@Shadow`ed rather
+than looked up, the entity is a direct field read, "is it a player" is an `instanceof` rather than
+`getClass().getName().contains(...)`, and the inventory scan uses the real fields.
+
+The original also wrote `(++n & 0x2710) == 0` for its periodic cache cleanup. That is a bitwise
+AND, not a modulo — true for `n` = 1 through 15 and then only sporadically, so the cache was wiped
+almost continuously at first and unpredictably afterwards. It is now `% 10000`.
+
+### Worthless drops in water despawn in 30 seconds instead of 5 minutes
+
+Water collects items: currents carry drops together and nothing removes them early, so any body of
+water near a fight accumulates stacks nobody will collect, each running a full entity tick for five
+minutes.
+
+The filter is deliberately conservative, because deleting an item a player wanted is worse than any
+tick it costs. Untouched: anything with a thrower set (player-dropped), enchanted, named in an
+anvil, unstackable (`maxStackSize <= 1` — tools, armour, weapons, boss drops), and everything from
+OreSpawn, whose scales and bones are crafting materials. The check itself only runs when
+`ticksExisted % 40 == 20`.
 
 ---
 
@@ -152,17 +188,45 @@ and **SRG method names**, which already appear literally in the compiled bytecod
 nothing to remap, so the refmap is empty and `javac` alone is enough. `-proc:none` disables the
 Mixin annotation processor deliberately, since its only job is generating that refmap.
 
-The script checks its classpath before compiling and fails loudly if anything is missing:
+### Classpath order is not cosmetic
+
+Minecraft 1.7.10 runs with **MCP class names** (`net.minecraft.entity.Entity`) but **SRG member
+names** (`func_145782_y`, `field_70173_aa`). Without a refmap, whatever member names the compiler
+writes into the bytecode are the names looked up at runtime — so they have to be SRG, or the patch
+dies with `NoSuchMethodError` the first time it runs.
+
+That makes the jar providing `net.minecraft.*` a correctness dependency, not a convenience:
 
 | | |
 |---|---|
-| `forgeSrc-1.7.10-10.13.4.1614-1.7.10.jar` | deobfuscated Minecraft classes |
-| `+unimixins-all-1.7.10-0.3.1.jar` | Mixin annotations |
-| `Ore-Spawn-Mod-1.7.10.jar` | resolving the mixin targets |
+| `deobfed.jar` | Minecraft with **SRG** members — **must come first** |
+| `forgeSrc-1.7.10-10.13.4.1614-1.7.10.jar` | Minecraft with MCP members, plus `cpw.mods.fml.*` and `net.minecraftforge.*` |
+| `+unimixins-all-1.7.10-0.3.1.jar` | Mixin annotations and GTNHMixins |
+| the target mod's jar | resolving `targets` in late mixins |
+
+Both Minecraft jars carry `net.minecraft.*`. With the SRG one first, `javac` resolves vanilla
+members to SRG. Forge's and FML's own classes exist only in `forgeSrc` and are not obfuscated, so
+they come from there safely.
+
+This is checkable, and worth checking after any build that touches vanilla members:
+
+```
+javap -c -p com.sondplay.tweaks.mixins.early.MixinASMEventHandler \
+  | grep -oE '// (Method|Field) net/minecraft[^ ]*'
+
+// Field  net/minecraft/entity/player/EntityPlayer.field_71071_by:...
+// Method net/minecraft/item/ItemStack.func_77973_b:()Lnet/minecraft/item/Item;
+```
+
+Anything readable in that output that is not under `net.minecraftforge` is a bug waiting to fire.
 
 Compile with JDK 8, or with a newer JDK targeting 8. The **runtime** is Java 17+ — only the
 emitted bytecode has to be Java 8, because Mixin merges these methods into classes compiled for
 Java 6.
+
+The lack of a reproducible build is the main open weakness here: `deobfed.jar` is produced locally
+rather than fetched. Moving to [RetroFuturaGradle](https://github.com/GTNewHorizons/RetroFuturaGradle)
+would fix that and generate a proper refmap, at the cost of pulling down all of Minecraft and MCP.
 
 ---
 
