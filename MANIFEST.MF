@@ -1,0 +1,5 @@
+Manifest-Version: 1.0
+MixinConfigs: mixins.sondplaytweaks.json
+FMLCorePluginContainsFMLMod: true
+TweakClass: org.spongepowered.asm.launch.MixinTweaker
+Created-By: sondPlayTweaks-1.0
