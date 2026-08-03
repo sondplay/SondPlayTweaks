@@ -16,7 +16,7 @@ cd "$(dirname "$0")"
 
 # Manter em sincronia com SondPlayTweaks.VERSION (o script confere abaixo).
 MCVER='1.7.10'
-VERSION='0.1.0'
+VERSION='0.2.0'
 
 FORGE='C:/Users/$ondPlay/.gradle/caches/minecraft/net/minecraftforge/forge/1.7.10-10.13.4.1614-1.7.10/forgeSrc-1.7.10-10.13.4.1614-1.7.10.jar'
 MODS='C:/PolyMC/instances/Modpack Edredom/.minecraft/mods'

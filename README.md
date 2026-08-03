@@ -9,8 +9,8 @@ was inferred rather than measured, it says so.
 
 ```
 Minecraft   1.7.10
-Requires    UniMixins (or any Mixin 0.8+ provider)
-Version     0.1.0
+Requires    UniMixins
+Version     0.2.0
 ```
 
 ---
@@ -62,24 +62,59 @@ only `removeLeaves` keeps every one of them and simply never deletes the block.
 All four classes declare `private void removeLeaves(World, int, int, int)` with an identical
 signature, so a single mixin with a `targets` list covers all of them.
 
-**This is a correctness fix, not a performance one — now measured.** The scan still runs; this
-patch does not touch it. A 20-minute spark profile under deliberate stress (hundreds of OreSpawn
-bosses fighting, then the player running far away to force chunk generation) puts every OreSpawn
-block tick at the bottom of the table:
+**This is a correctness fix. Its performance effect is unmeasured.** The scan still runs; this
+patch does not touch it.
+
+A 20-minute spark profile shows no OreSpawn leaf tick at all — but that profile was taken in the
+**overworld**, where this mod's trees are rare. The dimensions where they grow in bulk, which is
+where the symptom was reported, were never profiled. Absence there is not evidence of zero cost
+here.
+
+What the same profile does establish is that a *different* mod's leaves are the real block-tick
+cost in the overworld:
 
 ```
 updateBlocks total                                     9.70 ms/tick
-  extrabiomes.blocks.BlockLeafEbxl.updateTick          2.85 ms/tick
+  extrabiomes.blocks.BlockLeafEbxl.updateTick          2.85 ms/tick     29% of all block ticks
   net.minecraft.block.BlockLeaves.updateTick           0.07 ms/tick
-  danger.orespawn.AntBlock.updateTick                  0.00 ms/tick
-  danger.orespawn.BlockButterflyPlant.updateTick       0.00 ms/tick
-  danger.orespawn.BlockLettuce.updateTick              0.00 ms/tick
-  the four OreSpawn leaf classes                       absent from the profile entirely
 ```
 
-So the earlier suspicion that OreSpawn leaves were a meaningful share of block-tick time was
-wrong. They cost essentially nothing. What this patch fixes is trees destroying themselves, which
-is a bug regardless of its cost.
+Either way, trees destroying themselves is a bug regardless of what it costs.
+
+---
+
+## Every mixin here loads in the late phase
+
+A mixin config listed in the jar manifest under `MixinConfigs` is processed during the
+LaunchWrapper phase, **before FML has added ordinary mod jars to the classpath**. A mixin in that
+config targeting a class that belongs to a regular mod finds nothing, and Mixin drops it with a
+warning rather than an error:
+
+```
+[mixin]: Error loading class: some/mod/SomeClass (ClassNotFoundException)
+[mixin]: @Mixin target some.mod.SomeClass was not found ...
+```
+
+Boot continues and the patch silently never applies. This is not theoretical — it was found in
+the pack this mod was built for, where another mod's mixin targets `morph.common.morph.MorphState`.
+That class is present in the Morph jar; it is simply not on the classpath yet when the early
+config is read. The patch has never once run.
+
+Every mixin in this mod targets a mod class, so they all live in `mixins.sondplaytweaks.late.json`,
+registered through GTNHMixins' `ILateMixinLoader` (shipped inside UniMixins) at
+`LoaderState.CONSTRUCTING`. That interface also hands over the set of loaded mod ids, so each
+patch is gated on its target mod actually being installed rather than relying on a not-found
+warning:
+
+```java
+public List<String> getMixins(Set<String> loadedMods) {
+    List<String> mixins = new ArrayList<String>();
+    if (loadedMods.contains("orespawn")) mixins.add("MixinOreSpawnLeaves");
+    return mixins;
+}
+```
+
+This is why UniMixins is a hard requirement rather than "any Mixin 0.8+ provider".
 
 ---
 

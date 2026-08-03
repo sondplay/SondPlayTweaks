@@ -10,6 +10,18 @@ A patch gets added here only if it clears these:
    the original plan was going to cancel.
 2. **Say what was measured and what was inferred.** "This is 17% of the tick" is a claim that
    needs a profile behind it. If there isn't one, the README says so.
+3. **Never A/B two profiles.** Each profiling run happens on a different world, in a different
+   region, with different terrain and a different mob population. Comparing run A to run B
+   measures the worlds, not the patch, and it will manufacture a result every time. Read *ratios
+   within a single run* — what dominates, what is a rounding error, what shape a hot path has.
+   To measure a patch, the setup has to be reproducible (superflat, N entities spawned by
+   command), not two ordinary sessions placed side by side.
+4. **A profile cannot show what a patch prevented.** Work that was skipped does not appear. If a
+   guard exists to stop handlers from running, the handlers it stopped are invisible, and the
+   surviving ones are not a measure of what it saved. Costs are measurable; avoided costs are
+   not. Do not write a verdict that depends on the counterfactual.
+5. **Absence in a profile is not zero.** A block that never ticked in the profiled region may
+   dominate somewhere else. Say where the profile was taken.
 3. **No behaviour loss disguised as optimisation.** Throttling a mob's update by distance makes
    the mob visibly worse; that is not a performance fix, it is a downgrade with a benchmark
    attached.

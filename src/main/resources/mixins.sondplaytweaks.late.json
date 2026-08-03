@@ -1,10 +1,11 @@
 {
   "required": true,
   "minVersion": "0.8",
-  "package": "com.sondplay.tweaks.mixins",
+  "package": "com.sondplay.tweaks.mixins.late",
   "compatibilityLevel": "JAVA_8",
   "target": "@env(DEFAULT)",
   "mixins": [],
-  "client": [],
-  "server": []
+  "injectors": {
+    "defaultRequire": 1
+  }
 }

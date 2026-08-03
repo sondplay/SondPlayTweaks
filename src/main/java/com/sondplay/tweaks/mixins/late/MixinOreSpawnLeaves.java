@@ -1,4 +1,4 @@
-package com.sondplay.tweaks.mixins;
+package com.sondplay.tweaks.mixins.late;
 
 import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
