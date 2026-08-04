@@ -10,7 +10,7 @@ was inferred rather than measured, it says so.
 ```
 Minecraft   1.7.10
 Requires    UniMixins
-Version     0.5.0
+Version     0.5.1
 ```
 
 ---

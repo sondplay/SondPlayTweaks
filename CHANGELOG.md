@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.5.1
+
+**Adds `ForceLoadAsMod: true` to the manifest. Without it FML never loaded this as a mod at all.**
+
+A jar that declares a `TweakClass` is classified by FML as a library rather than a mod unless it
+also says otherwise, and the log says so plainly:
+
+```
+[FML]: Skipping known library file ... SondPlayTweaks-1.7.10-0.5.0.jar
+[FML]: Skipping already parsed coremod or tweaker SondPlayTweaks-1.7.10-0.5.0.jar
+```
+
+Two things broke from that one omission:
+
+- The `@Mod` class never constructed, so 0.5.0 produced no config file, no `/spt` command and no
+  summary — the entire point of that release.
+- GTNHMixins discovers `ILateMixinLoader` implementations through FML's ASMData table, which only
+  contains classes from jars loaded as mods. Ours was never in it, so the late config was never
+  registered and **the OreSpawn leaf patch has still never applied**, in any version.
+
+The two early mixins were unaffected and did apply — the log shows `MixinASMEventHandler` merged
+into `ASMEventHandler` and `MixinPathNavigateThrottle` into `PathNavigate`, with no injection
+errors. Being able to see all of this at a glance is what 0.5.0 was for; it found its own bug on
+the first boot.
+
 ## 0.5.0
 
 Makes the mod observable. Nothing about what the patches do changes.
