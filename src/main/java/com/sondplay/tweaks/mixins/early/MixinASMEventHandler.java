@@ -1,5 +1,8 @@
 package com.sondplay.tweaks.mixins.early;
 
+import com.sondplay.tweaks.Cfg;
+import com.sondplay.tweaks.Log;
+import com.sondplay.tweaks.Stats;
 import cpw.mods.fml.common.ModContainer;
 import cpw.mods.fml.common.eventhandler.ASMEventHandler;
 import cpw.mods.fml.common.eventhandler.Event;
@@ -83,21 +86,30 @@ public abstract class MixinASMEventHandler {
 
     @Inject(method = "invoke", at = @At("HEAD"), cancellable = true)
     private void sondplaytweaks$skipUnaffectedEntities(Event event, CallbackInfo ci) {
+        if (!Cfg.superheroesGuard) return;
         if (!(event instanceof LivingEvent.LivingUpdateEvent)) return;
 
         Boolean isTarget = sondplaytweaks$isTargetHandler.get(this);
         if (isTarget == null) {
             isTarget = sondplaytweaks$computeIsTargetHandler();
             sondplaytweaks$isTargetHandler.put(this, isTarget);
+            if (isTarget) {
+                Stats.shsHandlersMatched.increment();
+                Log.verbose("superheroes: matched handler " + this.readable);
+            }
         }
         if (!isTarget) return;
 
         // Was Field.get() on a public final field — 1.94 ms/tick, for nothing.
         EntityLivingBase entity = ((LivingEvent) event).entityLiving;
-        if (entity == null) { ci.cancel(); return; }
+        if (entity == null) { Stats.shsSkippedNotPlayer.increment(); ci.cancel(); return; }
 
         // Was getClass().getName().contains("EntityPlayer") on every invoke.
-        if (!(entity instanceof EntityPlayer)) { ci.cancel(); return; }
+        if (!(entity instanceof EntityPlayer)) {
+            Stats.shsSkippedNotPlayer.increment();
+            ci.cancel();
+            return;
+        }
 
         // Drop stale entries for players who disconnected.
         // The original wrote (++n & 0x2710) == 0, which is a bitwise AND, not a modulo: it is true
@@ -118,10 +130,16 @@ public abstract class MixinASMEventHandler {
         }
         if (now - entry[0] > sondplaytweaks$GEAR_TTL_MS) {
             entry[0] = now;
+            Stats.shsGearScans.increment();
             entry[1] = sondplaytweaks$hasTargetGear(player) ? 1L : 0L;
+            Log.verbose("superheroes: rescanned " + player.getClass().getSimpleName()
+                    + " id " + id + " -> gear=" + (entry[1] == 1L));
         }
         if (entry[1] == 0L) {
+            Stats.shsSkippedNoGear.increment();
             ci.cancel();
+        } else {
+            Stats.shsAllowed.increment();
         }
     }
 

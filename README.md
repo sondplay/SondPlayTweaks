@@ -10,7 +10,7 @@ was inferred rather than measured, it says so.
 ```
 Minecraft   1.7.10
 Requires    UniMixins
-Version     0.4.0
+Version     0.5.0
 ```
 
 ---
@@ -159,6 +159,47 @@ Every mob in the game reaches this method, so scope is a single byte field read 
 call per navigator. Vanilla AI keeps its own backoff untouched.
 
 ---
+
+## Seeing what the patches are doing
+
+Every patch counts what it does and prints a summary. Nothing logs per call — these methods run
+thousands of times per tick, and a log line in any of them would cost more than the patch saves and
+bury the log file. What is affordable in a hot path is an increment; what is useful is the ratio
+between them, printed occasionally.
+
+```
+[SondPlayTweaks] --- last 60s ---
+[SondPlayTweaks]   leaves       blocked 412 removal(s)
+[SondPlayTweaks]   superheroes  250 new handler(s) matched | skipped 1204331 not-player + 8210 no-gear | allowed 1190 | 99% skipped
+[SondPlayTweaks]                gear rescans 61  (expect ~1/player/second — a large number means the cache is not holding)
+[SondPlayTweaks]   pathfinding  87 new OreSpawn navigator(s) | skipped 44120, ran A* 3310 | 93% skipped
+[SondPlayTweaks]                of those that ran: 402 reached the target, 2908 stopped short | peak penalty 100 ticks
+[SondPlayTweaks]                most paths are not reaching — this is the case the backoff exists for
+```
+
+`/spt` prints the same thing on demand and clears the counters, which is how you measure one
+specific thing: `/spt reset`, do the thing, `/spt`.
+
+### config/sondplaytweaks.cfg
+
+```properties
+orespawnLeaves=true
+superheroesGuard=true
+orespawnPathThrottle=true
+
+statsIntervalSeconds=60
+verbose=false
+```
+
+**Each patch has its own switch, and that is the point.** In a pack of two hundred mods, turning
+one patch off and seeing whether a symptom moves is the only reliable way to attribute a change to
+it. A patch switched off still has its mixin applied and returns immediately, which costs a static
+boolean read — the price of being able to bisect a problem without rebuilding the jar.
+
+`verbose=true` logs every individual decision instead of counting them. It writes from inside
+methods that run thousands of times per tick: expect it to cost more than every patch here saves,
+and to produce log files in the hundreds of megabytes. It exists for pinning down one misbehaving
+entity, for a minute, deliberately.
 
 ## Which phase a mixin belongs in, and why it matters
 

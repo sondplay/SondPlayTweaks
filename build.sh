@@ -16,7 +16,7 @@ cd "$(dirname "$0")"
 
 # Manter em sincronia com SondPlayTweaks.VERSION (o script confere abaixo).
 MCVER='1.7.10'
-VERSION='0.4.0'
+VERSION='0.5.0'
 
 # ORDEM DO CLASSPATH IMPORTA.
 #
@@ -35,6 +35,7 @@ VERSION='0.4.0'
 #  chamar um metodo do vanilla direto nao tinha como funcionar.)
 DEOBF='C:/PolyMC/instances/Paraiso Fiscal/HeapCleaner/forge-src/build/tmp/deobfuscateJar/deobfed.jar'
 FORGE='C:/Users/$ondPlay/.gradle/caches/minecraft/net/minecraftforge/forge/1.7.10-10.13.4.1614-1.7.10/forgeSrc-1.7.10-10.13.4.1614-1.7.10.jar'
+LOG4J='C:/PolyMC/libraries/org/apache/logging/log4j/log4j-api/2.0-beta9-fixed/log4j-api-2.0-beta9-fixed.jar'
 MODS='C:/PolyMC/instances/Modpack Edredom/.minecraft/mods'
 MIXIN="$MODS/+unimixins-all-1.7.10-0.3.1.jar"
 ORESPAWN="$MODS/Ore-Spawn-Mod-1.7.10.jar"
@@ -50,7 +51,7 @@ if [ "$DECLARADA" != "$VERSION" ]; then
     exit 1
 fi
 
-for f in "$DEOBF" "$FORGE" "$MIXIN" "$ORESPAWN"; do
+for f in "$DEOBF" "$FORGE" "$LOG4J" "$MIXIN" "$ORESPAWN"; do
     [ -f "$f" ] || { echo "FALTANDO no classpath: $f"; exit 1; }
 done
 
@@ -58,7 +59,7 @@ echo "== compilando =="
 rm -rf OUT && mkdir -p OUT
 find "$SRC" -name '*.java' > .sources
 javac -encoding UTF-8 -source 8 -target 8 -nowarn -proc:none \
-      -cp "$DEOBF;$FORGE;$MIXIN;$ORESPAWN" -d OUT @.sources
+      -cp "$DEOBF;$FORGE;$LOG4J;$MIXIN;$ORESPAWN" -d OUT @.sources
 rm -f .sources
 
 echo "== empacotando =="

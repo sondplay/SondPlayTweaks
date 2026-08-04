@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.0
+
+Makes the mod observable. Nothing about what the patches do changes.
+
+- **Counters and a periodic summary.** Each patch counts what it does; a line goes to the log every
+  `statsIntervalSeconds`. Nothing logs per call — these methods run thousands of times per tick and
+  a log line in any of them would cost more than the patch saves.
+- **`/spt`** prints the counters on demand and clears them, so a single action can be measured:
+  `/spt reset`, do the thing, `/spt`.
+- **`config/sondplaytweaks.cfg`, with a switch per patch.** Turning one off and seeing whether a
+  symptom moves is the only reliable way to attribute a change to a patch in a pack this size. A
+  disabled patch still has its mixin applied and returns immediately.
+- **`verbose=true`** logs every individual decision instead of counting it. It writes from inside
+  per-tick hot paths and will cost more than every patch here saves. For pinning down one entity,
+  briefly, on purpose.
+
 ## 0.4.0
 
 - **OreSpawn entities get vanilla's path recompute cooldown and failure backoff.** The largest

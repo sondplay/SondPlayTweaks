@@ -1,5 +1,8 @@
 package com.sondplay.tweaks.mixins.late;
 
+import com.sondplay.tweaks.Cfg;
+import com.sondplay.tweaks.Log;
+import com.sondplay.tweaks.Stats;
 import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -53,6 +56,13 @@ public class MixinOreSpawnLeaves {
 
     @Inject(method = "removeLeaves", at = @At("HEAD"), cancellable = true)
     private void sondplaytweaks$manterFolha(World world, int x, int y, int z, CallbackInfo ci) {
+        if (!Cfg.orespawnLeaves) return;
+        Stats.leafBlocked.increment();
+        if (Cfg.verbose) {
+            Log.verbose("leaves: blocked removal of " + this.getClass().getSimpleName()
+                    + " at " + x + "," + y + "," + z
+                    + " dim " + (world.field_73011_w == null ? "?" : world.field_73011_w.field_76574_g));
+        }
         ci.cancel();
     }
 }

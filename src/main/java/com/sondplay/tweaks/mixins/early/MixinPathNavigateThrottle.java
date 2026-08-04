@@ -1,5 +1,8 @@
 package com.sondplay.tweaks.mixins.early;
 
+import com.sondplay.tweaks.Cfg;
+import com.sondplay.tweaks.Log;
+import com.sondplay.tweaks.Stats;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityLiving;
 import net.minecraft.pathfinding.PathEntity;
@@ -131,11 +134,16 @@ public abstract class MixinPathNavigateThrottle {
      */
     private void sondplaytweaks$gate(double tx, double ty, double tz,
                                      CallbackInfoReturnable<Boolean> cir) {
+        if (!Cfg.orespawnPathThrottle) return;
+
         if (sondplaytweaks$scope == 0) {
             EntityLiving e = this.field_75515_a;
-            sondplaytweaks$scope =
-                    (e != null && e.getClass().getName().startsWith("danger.orespawn."))
-                            ? (byte) 1 : (byte) 2;
+            boolean scoped = e != null && e.getClass().getName().startsWith("danger.orespawn.");
+            sondplaytweaks$scope = scoped ? (byte) 1 : (byte) 2;
+            if (scoped) {
+                Stats.pathNavigatorsScoped.increment();
+                Log.verbose("path: now throttling " + e.getClass().getSimpleName());
+            }
         }
         if (sondplaytweaks$scope != 1) return;
 
@@ -149,7 +157,15 @@ public abstract class MixinPathNavigateThrottle {
                                              sondplaytweaks$lastZ) >= 1.0D
                     || SONDPLAYTWEAKS$RNG.nextFloat() < 0.05F);
 
-        if (!allowed) {
+        if (allowed) {
+            Stats.pathRan.increment();
+        } else {
+            Stats.pathSkipped.increment();
+            if (Cfg.verbose) {
+                Log.verbose("path: skipped for " + sondplaytweaks$name()
+                        + " delay=" + sondplaytweaks$delay
+                        + " penalty=" + sondplaytweaks$failPenalty);
+            }
             cir.setReturnValue(!this.func_75500_f());
         }
     }
@@ -175,8 +191,15 @@ public abstract class MixinPathNavigateThrottle {
         }
         if (reached) {
             sondplaytweaks$failPenalty = 0;
-        } else if (sondplaytweaks$failPenalty < SONDPLAYTWEAKS$MAX_PENALTY) {
-            sondplaytweaks$failPenalty += 10;
+            Stats.pathReached.increment();
+        } else {
+            if (sondplaytweaks$failPenalty < SONDPLAYTWEAKS$MAX_PENALTY) {
+                sondplaytweaks$failPenalty += 10;
+            }
+            Stats.pathFailed.increment();
+        }
+        if (sondplaytweaks$failPenalty > Stats.pathPeakPenalty) {
+            Stats.pathPeakPenalty = sondplaytweaks$failPenalty;
         }
 
         EntityLiving self = this.field_75515_a;
@@ -188,6 +211,19 @@ public abstract class MixinPathNavigateThrottle {
         }
 
         if (!result) sondplaytweaks$delay += 15;
+
+        if (Cfg.verbose) {
+            Log.verbose("path: ran for " + sondplaytweaks$name()
+                    + " reached=" + reached
+                    + " result=" + result
+                    + " -> delay=" + sondplaytweaks$delay
+                    + " penalty=" + sondplaytweaks$failPenalty);
+        }
+    }
+
+    private String sondplaytweaks$name() {
+        EntityLiving e = this.field_75515_a;
+        return e == null ? "?" : e.getClass().getSimpleName();
     }
 
     private static double sondplaytweaks$distSq(double ax, double ay, double az,
