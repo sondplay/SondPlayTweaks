@@ -6,7 +6,7 @@
   "target": "@env(DEFAULT)",
   "mixins": [
     "MixinASMEventHandler",
-    "MixinEntityItemWaterDespawn"
+    "MixinPathNavigateThrottle"
   ],
   "injectors": {
     "defaultRequire": 1

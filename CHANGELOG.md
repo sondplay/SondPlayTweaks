@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0
+
+- **OreSpawn entities get vanilla's path recompute cooldown and failure backoff.** The largest
+  single cost in the profile: `GiantRobot` 7.12, `Hammerhead` 4.04 and `Godzilla` 1.82 ms/tick in
+  `tryMoveToEntityLiving`, **12.98 ms/tick** from three classes against a 50 ms budget, with
+  8.57 ms of that spent reading blocks inside A*. The cause is not how often OreSpawn paths — its
+  callers are gated behind their own rolls — it is that an unreachable target is re-pathed at full
+  rate forever, because the mod calls `PathNavigate` directly out of `updateAITasks` and skips the
+  delay counter and failure penalty that `EntityAIAttackOnCollide` gives every vanilla mob. This
+  reproduces that arithmetic at the navigator level, scoped to `danger.orespawn.` classes.
+- **Removed the water despawn patch.** It shortened the despawn timer for junk items floating in
+  water from five minutes to thirty seconds. It was carried over from the pack's earlier patch jar
+  because it was there, not because it had earned a place: there was no measurement behind it, and
+  it made loot disappear ten times faster, which is a behaviour change a player pays for. That is
+  the exact thing `CONTRIBUTING.md` rule 3 forbids.
+
 ## 0.3.0
 
 Absorbs the pack's earlier patch jar, which is now retired.

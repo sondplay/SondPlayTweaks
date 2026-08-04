@@ -10,7 +10,7 @@ was inferred rather than measured, it says so.
 ```
 Minecraft   1.7.10
 Requires    UniMixins
-Version     0.3.0
+Version     0.4.0
 ```
 
 ---
@@ -105,17 +105,58 @@ The original also wrote `(++n & 0x2710) == 0` for its periodic cache cleanup. Th
 AND, not a modulo — true for `n` = 1 through 15 and then only sporadically, so the cache was wiped
 almost continuously at first and unpredictably afterwards. It is now `% 10000`.
 
-### Worthless drops in water despawn in 30 seconds instead of 5 minutes
+### OreSpawn entities get vanilla's path recompute cooldown and failure backoff
 
-Water collects items: currents carry drops together and nothing removes them early, so any body of
-water near a fight accumulates stacks nobody will collect, each running a full entity tick for five
-minutes.
+**Measured, and the largest single cost in the profile.** Server thread at 75.96 ms/tick against a
+50 ms budget, with hundreds of OreSpawn bosses fighting:
 
-The filter is deliberately conservative, because deleting an item a player wanted is worse than any
-tick it costs. Untouched: anything with a thrower set (player-dropped), enchanted, named in an
-anvil, unstackable (`maxStackSize <= 1` — tools, armour, weapons, boss drops), and everything from
-OreSpawn, whose scales and bones are crafting materials. The check itself only runs when
-`ticksExisted % 40 == 20`.
+```
+GiantRobot.updateAITasks  7.87 ms  ->  tryMoveToEntityLiving  7.12 ms
+Hammerhead.updateAITasks  4.40 ms  ->  tryMoveToEntityLiving  4.04 ms
+Godzilla.updateAITasks    3.36 ms  ->  tryMoveToEntityLiving  1.82 ms
+                                       ----------------------------
+                                       12.98 ms/tick, three classes
+```
+
+All three have the same shape underneath — `findPathOptions` → `getSafePoint` →
+`getVerticalOffset` → `func_82565_a` → `World.getBlock`, with **8.57 ms of the 12.98** spent
+reading blocks inside A*. Several more OreSpawn entities sit unexpanded in the same profile
+(`SeaViper` 3.01, `Hydrolisc` 1.56, `PitchBlack` 1.41, `Kraken` 1.29, `Lizard` 1.02 ms/tick).
+
+**The cause is not frequency.** OreSpawn's callers are already gated behind their own `nextInt`
+rolls, at a rate comparable to vanilla's. The difference is that **when a target cannot be
+reached, the cost never goes down**. Vanilla's `EntityAIAttackOnCollide` keeps a delay counter and
+a failure penalty: every attempt whose path stops short of the target adds 10 ticks to the next
+wait, so a mob stuck behind a wall degrades to roughly every 19, then 34, then 49 ticks. OreSpawn
+calls `PathNavigate` straight out of `updateAITasks` with neither, so an unreachable target is
+re-pathed at full rate forever. With hundreds of bosses shoving each other, most targets are
+unreachable most of the time.
+
+**The fix reproduces vanilla's arithmetic** at the navigator level, for OreSpawn entities only:
+
+```
+path only when   delay <= 0 && (no remembered target || target moved >= 1 block || rand < 0.05)
+after pathing    delay = failPenalty + 4 + rand(7)
+                 +10 beyond 32 blocks, +5 beyond 16
+                 +15 if the call itself returned false
+failPenalty      += 10 when the path stopped short,  = 0 when it reached
+```
+
+Three details that are easy to get wrong:
+
+- **The 5% roll is not decoration.** It is the only thing that breaks a cooldown early. A plain
+  cooldown without it turns a mob whose target is standing still into a mob that stops reacting.
+- **When skipping, this returns `!noPath()`, never a flat `false`.** The return value means "am I
+  moving toward it", and vanilla's own `EntityAIAttackOnCollide` reads it to decide whether to add
+  its 15-tick penalty. Answering `false` would tell every caller the mob had given up while it was
+  in fact walking a perfectly good path.
+- **`failPenalty` is capped**, which vanilla does not do. Vanilla gets away with it because
+  acquiring a new target restarts the AI task and resets the counter; there is no equivalent signal
+  at the navigator level, so an unreachable target would otherwise push the delay up without bound
+  and eventually stop the mob pathing at all.
+
+Every mob in the game reaches this method, so scope is a single byte field read after the first
+call per navigator. Vanilla AI keeps its own backoff untouched.
 
 ---
 
@@ -243,8 +284,8 @@ deliberately overloaded world (hundreds of OreSpawn bosses fighting), server thr
 
 | Patch | Measured | Status |
 |---|---|---|
-| OreSpawn leaves destroying themselves | correctness, ~0 ms | **0.1.0** |
-| **Path recompute cooldown and failure backoff for OreSpawn entities.** OreSpawn calls `tryMoveToEntityLiving` (53 classes) and `tryMoveToXYZ` (30 classes) directly from `updateAITasks` with no cooldown and no `failedPathFindingPenalty`, so an unreachable target is re-pathed forever at a fixed rate. Vanilla degrades to 19, 34, then 49 ticks between attempts. | `GiantRobot` 7.12, `Hammerhead` 4.04, `Godzilla` 1.82 — **12.98 ms/tick** from three mobs alone, of which **8.57 ms** is `getBlock` inside `func_82565_a` | next |
+| OreSpawn leaves destroying themselves | correctness, unmeasured | **0.1.0** |
+| Path recompute cooldown and failure backoff for OreSpawn entities | **12.98 ms/tick** measured from three classes | **0.4.0** |
 | **ExtrabiomesXL leaf decay.** `BlockLeafEbxl` overrides `updateTick` and, like OreSpawn's, is not covered by Hodgepodge's BFS decay (which handles vanilla, BiomesOPlenty, Magical, Nether and Witch leaves) or by BugTorch. | **2.85 ms/tick**, 29% of all block-tick time | planned |
 | `findSomethingToAttack` — sorts the full entity list before filtering it | `GiantRobot` 0.02, `Hammerhead` 0.05, `Godzilla` 0.03 ms/tick | low priority |
 | ~~`chunkLoadOverride` / `dummyChunk` ([GTNH #11425](https://github.com/GTNewHorizons/GT-New-Horizons-Modpack/issues/11425))~~ | **dropped** | Pathfinding never reaches disk in this configuration. Under `getPathEntityToEntity`, `getChunkFromChunkCoords` resolves through `ChunkProviderServer.provideChunk` → `ServerThreadLongHashMap.getValueByKey` → a fastutil map hit, 0.3 ms/tick, with no `loadChunk` beneath it. Hodgepodge's `preventLoadingChunksWhenPathfinding` already closes this. |
