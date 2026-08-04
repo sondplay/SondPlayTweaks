@@ -124,9 +124,15 @@ public abstract class MixinASMEventHandler {
         long now = System.currentTimeMillis();
         long[] entry = sondplaytweaks$playerGear.get(id);
         if (entry == null) {
+            // [0] is the timestamp of the last scan and starts at 0, which reads as "never".
+            //
+            // Not Long.MIN_VALUE, which is what this said in 0.5.0 and 0.5.1: now - Long.MIN_VALUE
+            // is about 9.22e18 + 1.75e12, past Long.MAX_VALUE, so it overflowed to a negative
+            // number, the "> TTL" test was never true, the scan never ran, and the entry stayed 0
+            // forever — cancelling every handler for every player including one wearing the gear.
+            // The counters caught it: 123352 cancelled as "no gear" against 0 inventory scans.
             entry = new long[2];
             sondplaytweaks$playerGear.put(id, entry);
-            entry[0] = Long.MIN_VALUE;
         }
         if (now - entry[0] > sondplaytweaks$GEAR_TTL_MS) {
             entry[0] = now;

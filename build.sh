@@ -16,7 +16,7 @@ cd "$(dirname "$0")"
 
 # Manter em sincronia com SondPlayTweaks.VERSION (o script confere abaixo).
 MCVER='1.7.10'
-VERSION='0.5.1'
+VERSION='0.5.3'
 
 # ORDEM DO CLASSPATH IMPORTA.
 #

@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.5.3
+
+Two bugs the counters found on the first run that produced any.
+
+**The leaf patch still was not applying, because of mod id casing.** `getMixins` gated on
+`loadedMods.contains("orespawn")`, but OreSpawn's `mcmod.info` declares `"modid": "orespawn"`
+while the `@Mod` annotation on `danger.orespawn.OreSpawnMain` declares `modid = "OreSpawn"` — the
+jar disagrees with itself, and it is the annotation that reaches this method. The gate silently
+returned an empty list and the log said `Preparing mixins.sondplaytweaks.late.json (0)` and
+nothing else. The check is now case-insensitive, and `getMixins` logs what it decided, because a
+gate that declines in silence is indistinguishable from one that was never called.
+
+Also removed the config check from `getMixins`: that runs at `CONSTRUCTING` and the config file is
+not read until `preInit`, so it could only ever have seen the compiled-in default. The switches
+are honoured at runtime inside each mixin, where they belong.
+
+**The Superheroes guard was cancelling handlers for players wearing the gear.** New cache entries
+recorded their last-scan time as `Long.MIN_VALUE` to mean "never scanned", but `now -
+Long.MIN_VALUE` is roughly 9.22e18 + 1.75e12, past `Long.MAX_VALUE`. It overflowed negative, the
+`> TTL` test was never true, the inventory scan never ran, and the entry stayed at "no gear"
+forever. The timestamp now starts at 0.
+
+The counters are what exposed it, in a single line that could not be true:
+
+```
+skipped 29034776 not-player + 123352 no-gear | allowed 0
+gear rescans 0
+```
+
+123352 handlers cancelled for "no gear" against zero inventory scans.
+
 ## 0.5.1
 
 **Adds `ForceLoadAsMod: true` to the manifest. Without it FML never loaded this as a mod at all.**
